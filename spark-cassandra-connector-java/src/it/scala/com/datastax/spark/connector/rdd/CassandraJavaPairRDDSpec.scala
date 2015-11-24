@@ -2,15 +2,15 @@ package com.datastax.spark.connector.rdd
 
 import java.util
 
+import scala.collection.JavaConversions._
+import scala.concurrent.Future
+
+import org.apache.spark.api.java.function.{Function => JFunction, Function2}
+
 import com.datastax.spark.connector.SparkCassandraITFlatSpecBase
 import com.datastax.spark.connector.cql.CassandraConnector
 import com.datastax.spark.connector.embedded.SparkTemplate._
-import com.datastax.spark.connector.embedded._
 import com.datastax.spark.connector.japi.CassandraJavaUtil._
-import org.apache.spark.api.java.function.{Function => JFunction, Function2}
-
-import scala.collection.JavaConversions._
-import scala.reflect.ClassTag
 
 case class SimpleClass(value: Integer)
 
@@ -22,25 +22,46 @@ class CassandraJavaPairRDDSpec extends SparkCassandraITFlatSpecBase {
   val conn = CassandraConnector(defaultConf)
 
   conn.withSessionDo { session =>
-    session.execute("DROP KEYSPACE IF EXISTS java_api_test")
-    session.execute("CREATE KEYSPACE java_api_test WITH REPLICATION = { 'class': 'SimpleStrategy', 'replication_factor': 1 }")
+    createKeyspace(session)
+    doAsync(
+      Future {
+        session.execute(s"CREATE TABLE $ks.test_table_2 (key TEXT, key2 TEXT, value INT, PRIMARY KEY (key, key2))")
+        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('a', 'x', 1)")
+        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('a', 'y', 2)")
+        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('a', 'z', 3)")
+        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('b', 'x', 4)")
+        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('b', 'y', 5)")
+        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('b', 'z', 6)")
+        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('c', 'x', 7)")
+        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('c', 'y', 8)")
+        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('c', 'z', 9)")
+      },
 
-    session.execute("CREATE TABLE java_api_test.test_table_2 (key TEXT, key2 TEXT, value INT, PRIMARY KEY (key, key2))")
-    session.execute("INSERT INTO java_api_test.test_table_2 (key, key2, value) VALUES ('a', 'x', 1)")
-    session.execute("INSERT INTO java_api_test.test_table_2 (key, key2, value) VALUES ('a', 'y', 2)")
-    session.execute("INSERT INTO java_api_test.test_table_2 (key, key2, value) VALUES ('a', 'z', 3)")
-    session.execute("INSERT INTO java_api_test.test_table_2 (key, key2, value) VALUES ('b', 'x', 4)")
-    session.execute("INSERT INTO java_api_test.test_table_2 (key, key2, value) VALUES ('b', 'y', 5)")
-    session.execute("INSERT INTO java_api_test.test_table_2 (key, key2, value) VALUES ('b', 'z', 6)")
-    session.execute("INSERT INTO java_api_test.test_table_2 (key, key2, value) VALUES ('c', 'x', 7)")
-    session.execute("INSERT INTO java_api_test.test_table_2 (key, key2, value) VALUES ('c', 'y', 8)")
-    session.execute("INSERT INTO java_api_test.test_table_2 (key, key2, value) VALUES ('c', 'z', 9)")
+      Future {
+        session.execute(s"CREATE TABLE IF NOT EXISTS $ks.wide_rows(key INT, group INT, value VARCHAR, PRIMARY KEY (key, group))")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 10, '1010')")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 11, '1011')")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 12, '1012')")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 20, '2020')")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 21, '2021')")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 22, '2022')")
+      },
 
+      Future {
+        session.execute(s"CREATE TABLE IF NOT EXISTS $ks.wide_rows(key INT, group INT, value VARCHAR, PRIMARY KEY (key, group))")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 10, '1010')")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 11, '1011')")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 12, '1012')")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 20, '2020')")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 21, '2021')")
+        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 22, '2022')")
+      }
+    )
   }
 
   "CassandraJavaPairRDD" should "allow to reduce by key " in {
     val rows = javaFunctions(sc)
-      .cassandraTable("java_api_test", "test_table_2", mapRowTo(classOf[SimpleClass]))
+      .cassandraTable(ks, "test_table_2", mapRowTo(classOf[SimpleClass]))
       .select("key2", "value")
       .keyBy(mapColumnTo(classOf[String]), classOf[String], "key2")
 
@@ -57,23 +78,12 @@ class CassandraJavaPairRDDSpec extends SparkCassandraITFlatSpecBase {
   }
 
   it should "allow to use spanBy method" in {
-
-    conn.withSessionDo { session =>
-      session.execute("CREATE TABLE IF NOT EXISTS java_api_test.wide_rows(key INT, group INT, value VARCHAR, PRIMARY KEY (key, group))")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (10, 10, '1010')")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (10, 11, '1011')")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (10, 12, '1012')")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (20, 20, '2020')")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (20, 21, '2021')")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (20, 22, '2022')")
-    }
-
     val f = new JFunction[(Integer, Integer), Integer]() {
       override def call(row: (Integer, Integer)) = row._1
     }
 
     val results = javaFunctions(sc)
-      .cassandraTable("java_api_test", "wide_rows", mapColumnTo(classOf[Integer]))
+      .cassandraTable(ks, "wide_rows", mapColumnTo(classOf[Integer]))
       .select("group", "key")
       .keyBy(mapColumnTo(classOf[Integer]), classOf[Integer], "key")
       .spanBy(f, classOf[Integer])
@@ -90,23 +100,12 @@ class CassandraJavaPairRDDSpec extends SparkCassandraITFlatSpecBase {
   }
 
   it should "allow to use spanByKey method" in {
-
-    conn.withSessionDo { session =>
-      session.execute("CREATE TABLE IF NOT EXISTS java_api_test.wide_rows(key INT, group INT, value VARCHAR, PRIMARY KEY (key, group))")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (10, 10, '1010')")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (10, 11, '1011')")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (10, 12, '1012')")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (20, 20, '2020')")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (20, 21, '2021')")
-      session.execute("INSERT INTO java_api_test.wide_rows(key, group, value) VALUES (20, 22, '2022')")
-    }
-
     val f = new JFunction[(Integer, Integer), Integer]() {
       override def call(row: (Integer, Integer)) = row._1
     }
 
     val results = javaFunctions(sc)
-      .cassandraTable("java_api_test", "wide_rows", mapColumnTo(classOf[Integer]))
+      .cassandraTable(ks, "wide_rows", mapColumnTo(classOf[Integer]))
       .select("group", "key")
       .keyBy(mapColumnTo(classOf[Integer]), classOf[Integer], "key")
       .spanByKey()

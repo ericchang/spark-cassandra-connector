@@ -16,7 +16,7 @@ class CassandraConnectorSpec extends SparkCassandraITFlatSpecBase {
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
   val conn = CassandraConnector(defaultConf)
 
-  val createKeyspaceCql = "CREATE KEYSPACE IF NOT EXISTS test WITH REPLICATION = { 'class': 'SimpleStrategy', 'replication_factor': 1 }"
+  val createKeyspaceCql = keyspaceCql(ks)
 
   "A CassandraConnector" should "connect to Cassandra with native protocol" in {
     conn.withSessionDo { session =>
@@ -35,10 +35,10 @@ class CassandraConnectorSpec extends SparkCassandraITFlatSpecBase {
   it should "run queries" in {
     conn.withSessionDo { session =>
       session.execute(createKeyspaceCql)
-      session.execute("DROP TABLE IF EXISTS test.simple_query")
-      session.execute("CREATE TABLE test.simple_query (key INT PRIMARY KEY, value TEXT)")
-      session.execute("INSERT INTO test.simple_query(key, value) VALUES (1, 'value')")
-      val result = session.execute("SELECT * FROM test.simple_query WHERE key = ?", 1.asInstanceOf[AnyRef])
+      session.execute(s"DROP TABLE IF EXISTS $ks.simple_query")
+      session.execute(s"CREATE TABLE $ks.simple_query (key INT PRIMARY KEY, value TEXT)")
+      session.execute(s"INSERT INTO $ks.simple_query(key, value) VALUES (1, 'value')")
+      val result = session.execute(s"SELECT * FROM $ks.simple_query WHERE key = ?", 1.asInstanceOf[AnyRef])
       assert(result.one().getString("value") === "value")
     }
   }
@@ -46,10 +46,10 @@ class CassandraConnectorSpec extends SparkCassandraITFlatSpecBase {
   it should "cache PreparedStatements" in {
     conn.withSessionDo { session =>
       session.execute(createKeyspaceCql)
-      session.execute("DROP TABLE IF EXISTS test.pstmt")
-      session.execute("CREATE TABLE test.pstmt (key INT PRIMARY KEY, value TEXT)")
-      val stmt1 = session.prepare("INSERT INTO test.pstmt (key, value) VALUES (?, ?)")
-      val stmt2 = session.prepare("INSERT INTO test.pstmt (key, value) VALUES (?, ?)")
+      session.execute(s"DROP TABLE IF EXISTS $ks.pstmt")
+      session.execute(s"CREATE TABLE $ks.pstmt (key INT PRIMARY KEY, value TEXT)")
+      val stmt1 = session.prepare(s"INSERT INTO $ks.pstmt (key, value) VALUES (?, ?)")
+      val stmt2 = session.prepare(s"INSERT INTO $ks.pstmt (key, value) VALUES (?, ?)")
       assert(stmt1 eq stmt2)
     }
   }
@@ -102,11 +102,11 @@ class CassandraConnectorSpec extends SparkCassandraITFlatSpecBase {
 
   it should "not make multiple clusters when writing multiple RDDs" in {
     CassandraConnector(sc.getConf).withSessionDo{ session =>
-      session.execute("""CREATE KEYSPACE IF NOT EXISTS test WITH replication = { 'class': 'SimpleStrategy', 'replication_factor': 1 }""")
-      session.execute("""CREATE TABLE IF NOT EXISTS test.pair (x int, y int, PRIMARY KEY (x))""")
+      session.execute(createKeyspaceCql)
+      session.execute(s"CREATE TABLE IF NOT EXISTS $ks.pair (x int, y int, PRIMARY KEY (x))")
     }
     for (trial <- 1 to 3){
-      val rdd = sc.parallelize(1 to 100).map(x=> (x,x)).saveToCassandra("test","pair")
+      val rdd = sc.parallelize(1 to 100).map(x=> (x,x)).saveToCassandra(ks, "pair")
     }
     val sessionCache = CassandraConnector.sessionCache
     sessionCache.contains(CassandraConnectorConf(sc.getConf)) should be (true)
