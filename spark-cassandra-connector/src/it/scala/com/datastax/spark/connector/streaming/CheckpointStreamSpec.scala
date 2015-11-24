@@ -43,6 +43,12 @@ class CheckpointStreamSpec
       }
     }
 
+  override def afterAll(): Unit = {
+    super.afterAll()
+    //Force the recreation of the template Spark Context
+    useSparkConf(sc.getConf, true)
+  }
+
   "Spark Streaming + Checkpointing" should "work with JWCTable and RPCassandra Replica" in {
     val r = new Random()
     val dataTrim = dataSeq.map(_.map(_.trim))
