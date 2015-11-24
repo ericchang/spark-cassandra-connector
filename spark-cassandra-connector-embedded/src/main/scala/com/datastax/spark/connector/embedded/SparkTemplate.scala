@@ -11,10 +11,6 @@ trait SparkTemplate {
   /** Obtains the active [[org.apache.spark.SparkContext SparkContext]] object. */
   def sc: SparkContext = SparkTemplate.sc
 
-  /** Obtains the [[akka.actor.ActorSystem ActorSystem]] associated with the active
-    * `SparkEnv`. */
-  def actorSystem: ActorSystem = SparkTemplate.actorSystem
-
   /** Ensures that the currently running [[org.apache.spark.SparkContext SparkContext]] uses the provided
     * configuration. If the configurations are different or force is `true` Spark context is stopped and
     * started again with the given configuration. */
@@ -37,11 +33,12 @@ object SparkTemplate {
 
   private var _sc: SparkContext = _
 
+  private var _conf: SparkConf = _
   /** Ensures that the currently running [[org.apache.spark.SparkContext SparkContext]] uses the provided
     * configuration. If the configurations are different or force is `true` Spark context is stopped and
     * started again with the given configuration. */
   def useSparkConf(conf: SparkConf = SparkTemplate.defaultConf, force: Boolean = false): SparkContext = {
-    if (_sc.getConf.getAll.toMap != conf.getAll.toMap || force)
+    if (_conf.getAll.toMap != conf.getAll.toMap || force)
       resetSparkContext(conf)
     _sc
   }
@@ -52,6 +49,7 @@ object SparkTemplate {
     }
 
     System.err.println("Starting SparkContext with the following configuration:\n" + defaultConf.toDebugString)
+    _conf = conf.clone()
     for (cp <- sys.env.get("SPARK_SUBMIT_CLASSPATH"))
       conf.setJars(
         cp.split(File.pathSeparatorChar)
@@ -63,10 +61,6 @@ object SparkTemplate {
 
   /** Obtains the active [[org.apache.spark.SparkContext SparkContext]] object. */
   def sc: SparkContext = _sc
-
-  /** Obtains the [[akka.actor.ActorSystem ActorSystem]] associated with the active
-    * `SparkEnv`. */
-  def actorSystem: ActorSystem = SparkEnv.get.actorSystem
 
   def withoutLogging[T]( f: => T): T={
     val level = Logger.getRootLogger.getLevel
