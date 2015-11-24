@@ -6,6 +6,7 @@ import scala.collection.JavaConversions._
 
 import org.apache.commons.configuration.ConfigurationException
 import org.apache.commons.io.FileUtils
+import org.apache.spark.Logging
 
 /** A utility trait for integration testing.
   * Manages *one* single Cassandra server at a time and enables switching its configuration.
@@ -175,7 +176,7 @@ object EmbeddedCassandra {
 }
 
 private[connector] class CassandraRunner(val configTemplate: String, props: Map[String, String])
-  extends Embedded {
+  extends Embedded with Logging {
 
   import java.io.{File, FileOutputStream, IOException}
 
@@ -217,12 +218,14 @@ private[connector] class CassandraRunner(val configTemplate: String, props: Map[
   private val jammAgentProperty = jammAgent.map("-javaagent:" + _).getOrElse("")
   private val cassandraMainClass = "org.apache.cassandra.service.CassandraDaemon"
   private val nodeToolMainClass = "org.apache.cassandra.tools.NodeTool"
+  private val logConfigFileProperty = s"-Dlog4j.configuration=${getClass.getResource("/log4j.properties").toString}"
 
+  System.err.println("----==== Starting Embedded Cassandra ====----")
   private val process = new ProcessBuilder()
     .command(javaBin,
       "-Xms2G", "-Xmx2G", "-Xmn384M", "-XX:+UseConcMarkSweepGC",
       sizeEstimatesUpdateIntervalProperty,
-      cassandraConfProperty, jammAgentProperty, superuserSetupDelayProperty, jmxPortProperty,
+      cassandraConfProperty, jammAgentProperty, superuserSetupDelayProperty, jmxPortProperty, logConfigFileProperty,
       "-cp", classPath, cassandraMainClass, "-f")
     .inheritIO()
     .start()
