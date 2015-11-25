@@ -2,12 +2,6 @@ package com.datastax.spark.connector.embedded
 
 import java.net.InetAddress
 
-import scala.collection.JavaConversions._
-
-import org.apache.commons.configuration.ConfigurationException
-import org.apache.commons.io.FileUtils
-import org.apache.spark.Logging
-
 /** A utility trait for integration testing.
   * Manages *one* single Cassandra server at a time and enables switching its configuration.
   * This is not thread safe, and test suites must not be run in parallel,
@@ -40,7 +34,7 @@ trait EmbeddedCassandra {
         if (templatePairs(i)._2 != templatePairs(i)._1 || forceReload) {
           cassandraRunners.lift(i).flatten.foreach(_.destroy())
           cassandraRunners = cassandraRunners.patch(i,
-            Seq(Some(new CassandraRunner(configTemplates(i), getProps(i)))), 1)
+            Seq(Some(new CassandraRunner(configTemplates(i), getProps(i), EmbeddedCassandra.release(i)))), 1)
           currentConfigTemplates = currentConfigTemplates.patch(i, Seq(configTemplates(i)), 1)
         }
       }
@@ -48,73 +42,10 @@ trait EmbeddedCassandra {
   }
 }
 
-object UserDefinedProperty {
-
-  trait TypedProperty {
-    type ValueType
-
-    def convertValueFromString(str: String): ValueType
-
-    def checkValueType(obj: Any): ValueType
-  }
-
-  trait IntProperty extends TypedProperty {
-    type ValueType = Int
-
-    def convertValueFromString(str: String) = str.toInt
-
-    def checkValueType(obj: Any) =
-      obj match {
-        case x: Int => x
-        case _ => throw new ClassCastException(s"Expected Int but found ${obj.getClass.getName}")
-      }
-  }
-
-  trait InetAddressProperty extends TypedProperty {
-    type ValueType = InetAddress
-
-    def convertValueFromString(str: String) = InetAddress.getByName(str)
-
-    def checkValueType(obj: Any) =
-      obj match {
-        case x: InetAddress => x
-        case _ => throw new ClassCastException(s"Expected InetAddress but found ${obj.getClass.getName}")
-      }
-  }
-
-  abstract sealed class NodeProperty(val propertyName: String) extends TypedProperty
-
-  case object HostProperty extends NodeProperty("IT_TEST_CASSANDRA_HOSTS") with InetAddressProperty
-
-  case object PortProperty extends NodeProperty("IT_TEST_CASSANDRA_PORTS") with IntProperty
-
-  private def getValueSeq(propertyName: String): Seq[String] = {
-    sys.env.get(propertyName) match {
-      case Some(p) => p.split(",").map(e => e.trim).toIndexedSeq
-      case None => IndexedSeq()
-    }
-  }
-
-  private def getValueSeq(nodeProperty: NodeProperty): Seq[nodeProperty.ValueType] =
-    getValueSeq(nodeProperty.propertyName).map(x => nodeProperty.convertValueFromString(x))
-
-  val hosts = getValueSeq(HostProperty)
-  val ports = getValueSeq(PortProperty)
-
-  def getProperty(nodeProperty: NodeProperty): Option[String] =
-    sys.env.get(nodeProperty.propertyName)
-
-  def getPropertyOrThrowIfNotFound(nodeProperty: NodeProperty): String =
-    getProperty(nodeProperty).getOrElse(
-      throw new ConfigurationException(s"Missing ${nodeProperty.propertyName} in system environment"))
-}
 
 object EmbeddedCassandra {
 
   import com.datastax.spark.connector.embedded.UserDefinedProperty._
-
-  private def countCommaSeparatedItemsIn(s: String): Int =
-    s.count(_ == ',')
 
   getProperty(HostProperty) match {
     case None =>
@@ -127,136 +58,50 @@ object EmbeddedCassandra {
         "IT_TEST_CASSANDRA_HOSTS must have the same size as IT_TEST_CASSANDRA_NATIVE_PORTS")
   }
 
+  private val cassandraPorts: CassandraPorts = {
+    if (hosts.nonEmpty || ports.nonEmpty) {
+      CassandraPorts(ports)
+    } else {
+      DynamicCassandraPorts()
+    }
+  }
+
   private[connector] var cassandraRunners: IndexedSeq[Option[CassandraRunner]] = IndexedSeq(None)
 
   private[connector] var currentConfigTemplates: IndexedSeq[String] = IndexedSeq()
+
+  private def countCommaSeparatedItemsIn(s: String): Int = s.count(_ == ',')
 
   def getProps(index: Integer): Map[String, String] = {
     require(hosts.isEmpty || index < hosts.length, s"$index index is overflow the size of ${hosts.length}")
     val host = getHost(index).getHostAddress
     Map(
       "seeds" -> host,
-      "storage_port" -> getStoragePort(index).toString,
-      "ssl_storage_port" -> getSslStoragePort(index).toString,
+      "storage_port" -> cassandraPorts.getStoragePort(index).toString,
+      "ssl_storage_port" -> cassandraPorts.getSslStoragePort(index).toString,
       "native_transport_port" -> getPort(index).toString,
-      "jmx_port" -> getJmxPort(index).toString,
+      "jmx_port" -> cassandraPorts.getJmxPort(index).toString,
       "rpc_address" -> host,
       "listen_address" -> host,
       "cluster_name" -> getClusterName(index),
       "keystore_path" -> ClassLoader.getSystemResource("keystore").getPath)
   }
 
-  def getStoragePort(index: Integer) = 7000 + index
+  def getClusterName(index: Integer) = s"Test Cluster $index"
 
-  def getSslStoragePort(index: Integer) = 7100 + index
+  def getHost(index: Integer): InetAddress =
+    if (hosts.isEmpty) InetAddress.getByName("127.0.0.1") else hosts(index)
 
-  def getJmxPort(index: Integer) = CassandraRunner.DefaultJmxPort + index
-
-  def getClusterName(index: Integer) = s"Test Cluster$index"
-
-  def getHost(index: Integer): InetAddress = getNodeProperty(index, HostProperty)
-
-  def getPort(index: Integer) = getNodeProperty(index, PortProperty)
-
-  private def getNodeProperty(index: Integer, nodeProperty: NodeProperty): nodeProperty.ValueType = {
-    nodeProperty.checkValueType {
-      nodeProperty match {
-        case PortProperty if ports.isEmpty => 9042 + index
-        case PortProperty if index < hosts.size => ports(index)
-        case HostProperty if hosts.isEmpty => InetAddress.getByName("127.0.0.1")
-        case HostProperty if index < hosts.size => hosts(index)
-        case _ => throw new RuntimeException(s"$index index is overflow the size of ${hosts.size}")
-      }
-    }
-  }
+  def getPort(index: Integer): Int = cassandraPorts.getRpcPort(index)
 
   Runtime.getRuntime.addShutdownHook(new Thread(new Runnable {
     override def run() = cassandraRunners.flatten.foreach(_.destroy())
   }))
-}
 
-private[connector] class CassandraRunner(val configTemplate: String, props: Map[String, String])
-  extends Embedded with Logging {
-
-  import java.io.{File, FileOutputStream, IOException}
-
-  import CassandraRunner._
-  import com.google.common.io.Files
-
-  val tempDir = mkdir(new File(Files.createTempDir(), "spark-cassandra-connector"))
-  val workDir = mkdir(new File(tempDir, "cassandra"))
-  val dataDir = mkdir(new File(workDir, "data"))
-  val commitLogDir = mkdir(new File(workDir, "commitlog"))
-  val cachesDir = mkdir(new File(workDir, "saved_caches"))
-  val confDir = mkdir(new File(tempDir, "conf"))
-  val confFile = new File(confDir, "cassandra.yaml")
-
-  private val properties = Map("cassandra_dir" -> workDir.toString) ++ props
-  closeAfterUse(ClassLoader.getSystemResourceAsStream(configTemplate)) { input =>
-    closeAfterUse(new FileOutputStream(confFile)) { output =>
-      copyTextFileWithVariableSubstitution(input, output, properties)
+  def release(index: Int): Unit = {
+    cassandraPorts match {
+      case pr: DynamicCassandraPorts => pr.release()
+      case _ =>
     }
   }
-
-  private val classPath = sys.env.get("IT_CASSANDRA_PATH").map { customCassandraDir =>
-    val entries = (for (f <- Files.fileTreeTraverser().breadthFirstTraversal(new File(customCassandraDir, "lib")).toIterator
-                        if f.isDirectory || f.getName.endsWith(".jar")) yield {
-      f.getAbsolutePath
-    }).toList ::: new File(customCassandraDir, "conf") :: Nil
-    entries.mkString(File.pathSeparator)
-  } orElse sys.env.get("CASSANDRA_CLASSPATH") getOrElse System.getProperty("java.class.path")
-
-  private val javaBin = System.getProperty("java.home") + "/bin/java"
-  private val cassandraConfProperty = "-Dcassandra.config=file:" + confFile.toString
-  private val superuserSetupDelayProperty = "-Dcassandra.superuser_setup_delay_ms=0"
-  private val jmxPort = props.getOrElse("jmx_port", DefaultJmxPort)
-  private val jmxPortProperty = s"-Dcassandra.jmx.local.port=$jmxPort"
-  private val host = props.getOrElse("listen_address", "127.0.0.1")
-  private val sizeEstimatesUpdateIntervalProperty =
-    s"-Dcassandra.size_recorder_interval=$SizeEstimatesUpdateIntervalInSeconds"
-  private val jammAgent = classPath.split(File.pathSeparator).find(_.matches(".*jamm.*\\.jar"))
-  private val jammAgentProperty = jammAgent.map("-javaagent:" + _).getOrElse("")
-  private val cassandraMainClass = "org.apache.cassandra.service.CassandraDaemon"
-  private val nodeToolMainClass = "org.apache.cassandra.tools.NodeTool"
-  private val logConfigFileProperty = s"-Dlog4j.configuration=${getClass.getResource("/log4j.properties").toString}"
-
-  System.err.println("----==== Starting Embedded Cassandra ====----")
-  private val process = new ProcessBuilder()
-    .command(javaBin,
-      "-Xms2G", "-Xmx2G", "-Xmn384M", "-XX:+UseConcMarkSweepGC",
-      sizeEstimatesUpdateIntervalProperty,
-      cassandraConfProperty, jammAgentProperty, superuserSetupDelayProperty, jmxPortProperty, logConfigFileProperty,
-      "-cp", classPath, cassandraMainClass, "-f")
-    .inheritIO()
-    .start()
-  val startupTime = System.currentTimeMillis()
-
-  val nativePort = props.get("native_transport_port").get.toInt
-  if (!waitForPortOpen(InetAddress.getByName(props.get("rpc_address").get), nativePort, 100000))
-    throw new IOException("Failed to start Cassandra.")
-
-  def destroy() {
-    process.destroy()
-    process.waitFor()
-    FileUtils.forceDelete(tempDir)
-    tempDir.delete()
-  }
-
-  def nodeToolCmd(params: String*): Unit = {
-    val cmd = List(javaBin, "-Xms512M", "-Xmx512M", "-Xmn384M", cassandraConfProperty, "-cp", classPath,
-      nodeToolMainClass, "-h", host, "-p", jmxPort.toString) ++ params
-    val nodeToolCmdProcess = new ProcessBuilder()
-      .command(cmd: _*)
-      .inheritIO()
-      .start()
-    nodeToolCmdProcess.waitFor()
-    nodeToolCmdProcess.destroy()
-  }
 }
-
-object CassandraRunner {
-  val SizeEstimatesUpdateIntervalInSeconds = 5
-  val DefaultJmxPort = 7199
-}
-
-

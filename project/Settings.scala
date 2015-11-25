@@ -15,12 +15,9 @@
  */
 
 import java.io.File
-import java.net.URLDecoder
 
-import sbtassembly._
-import sbtassembly.AssemblyPlugin._
-import sbtassembly.AssemblyKeys._
-import sbtsparkpackage.SparkPackagePlugin.autoImport._
+import scala.language.postfixOps
+
 import com.scalapenos.sbt.prompt.SbtPrompt.autoImport._
 import com.typesafe.sbt.SbtScalariform
 import com.typesafe.sbt.SbtScalariform._
@@ -28,10 +25,13 @@ import com.typesafe.tools.mima.plugin.MimaKeys._
 import com.typesafe.tools.mima.plugin.MimaPlugin._
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 import sbt.Keys._
+import sbt.Tests._
 import sbt._
+import sbtassembly.AssemblyKeys._
+import sbtassembly.AssemblyPlugin._
+import sbtassembly._
 import sbtrelease.ReleasePlugin._
-
-import scala.language.postfixOps
+import sbtsparkpackage.SparkPackagePlugin.autoImport._
 
 object Settings extends Build {
 
@@ -42,6 +42,17 @@ object Settings extends Build {
   val cassandraServerClasspath = taskKey[String]("Cassandra server classpath")
 
   val mavenLocalResolver = BuildUtil.mavenLocalResolver
+
+  lazy val mainDir = new File(".")
+
+  lazy val TEST_JAVA_OPTS = Seq(
+    "-XX:MaxPermSize=256M",
+    "-Xms256m",
+    "-Xmx1g",
+    "-Dsun.io.serialization.extendedDebugInfo=true",
+    s"-DbaseDir=${mainDir.getAbsolutePath}")
+
+  var TEST_ENV: Option[Map[String, String]] = None
 
   def currentCommitSha = ("git rev-parse --short HEAD" !!).split('\n').head.trim
 
@@ -147,8 +158,8 @@ object Settings extends Build {
     updateOptions := updateOptions.value.withCachedResolution(cachedResoluton = true),
 
     ivyLoggingLevel in ThisBuild := UpdateLogging.Quiet,
-    parallelExecution in ThisBuild := false,
-    parallelExecution in Global := false,
+    parallelExecution in ThisBuild := true,
+    parallelExecution in Global := true,
     apiMappings ++= DocumentationMapping.mapJarToDocURL(
       (managedClasspath in (Compile, doc)).value,
       Dependencies.documentationMappings),
@@ -214,28 +225,50 @@ object Settings extends Build {
     publish in (IntegrationTest,packageBin) := ()
   )
 
+  def makeTestGroups(tests: Seq[TestDefinition]) = {
+    val groupsByPkgName = tests.groupBy(test => test.name.reverse.dropWhile(_ != '.').reverse)
+    groupsByPkgName.map { case (pkg, testsSeq) =>
+      new Group(
+        name = pkg,
+        tests = testsSeq,
+        runPolicy = SubProcess(ForkOptions(
+          runJVMOptions = TEST_JAVA_OPTS,
+          envVars = TEST_ENV.getOrElse(sys.env),
+          outputStrategy = Some(StdoutOutput))))
+    }.toSeq
+  }
+
   lazy val testSettings = testConfigs ++ testArtifacts ++ graphSettings ++ Seq(
-    parallelExecution in Test := false,
-    parallelExecution in IntegrationTest := false,
-    javaOptions in IntegrationTest ++= Seq(
-      "-XX:MaxPermSize=256M", "-Xmx1g", "-Dsun.io.serialization.extendedDebugInfo=true"
-    ),
+    parallelExecution in Test := true,
+    parallelExecution in IntegrationTest := true,
+    javaOptions in IntegrationTest ++= TEST_JAVA_OPTS,
     testOptions in Test ++= testOptionSettings,
     testOptions in IntegrationTest ++= testOptionSettings,
+    testGrouping in IntegrationTest <<= definedTests in IntegrationTest map makeTestGroups,
     fork in Test := true,
     fork in IntegrationTest := true,
     managedSourceDirectories in Test := Nil,
     (compile in IntegrationTest) <<= (compile in Test, compile in IntegrationTest) map { (_, c) => c },
-    (internalDependencyClasspath in IntegrationTest) <<= Classpaths.concat(internalDependencyClasspath in IntegrationTest, exportedProducts in Test)
+    (internalDependencyClasspath in IntegrationTest) <<= Classpaths.concat(
+      internalDependencyClasspath in IntegrationTest,
+      exportedProducts in Test)
   )
 
   lazy val pureCassandraSettings = Seq(
-    test in IntegrationTest <<= (cassandraServerClasspath in CassandraSparkBuild.cassandraServerProject in IntegrationTest, test in IntegrationTest) {
-          case (cassandraServerClasspathTask, testTask) => cassandraServerClasspathTask.flatMap(_ => testTask)
+    test in IntegrationTest <<= (
+      cassandraServerClasspath in CassandraSparkBuild.cassandraServerProject in IntegrationTest,
+      envVars in IntegrationTest,
+      test in IntegrationTest) { case (cassandraServerClasspathTask, envVarsTask, testTask) =>
+        cassandraServerClasspathTask.flatMap(_ => envVarsTask).flatMap(_ => testTask)
     },
-    envVars in IntegrationTest := sys.env +
-      ("CASSANDRA_CLASSPATH" -> (cassandraServerClasspath in CassandraSparkBuild.cassandraServerProject in IntegrationTest).value) +
-      ("SPARK_LOCAL_IP" -> "127.0.0.1")
+    envVars in IntegrationTest := {
+      val env = sys.env +
+        ("CASSANDRA_CLASSPATH" ->
+          (cassandraServerClasspath in CassandraSparkBuild.cassandraServerProject in IntegrationTest).value) +
+        ("SPARK_LOCAL_IP" -> "127.0.0.1")
+      TEST_ENV = Some(env)
+      env
+    }
   )
 
   lazy val japiSettings = Seq(
