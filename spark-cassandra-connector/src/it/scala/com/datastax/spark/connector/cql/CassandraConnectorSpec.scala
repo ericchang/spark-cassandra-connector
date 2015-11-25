@@ -14,6 +14,8 @@ case class KeyValueWithConversion(key: String, group: Int, value: Long)
 class CassandraConnectorSpec extends SparkCassandraITFlatSpecBase {
 
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
+  useSparkConf(defaultConf)
+
   val conn = CassandraConnector(defaultConf)
 
   val createKeyspaceCql = keyspaceCql(ks)

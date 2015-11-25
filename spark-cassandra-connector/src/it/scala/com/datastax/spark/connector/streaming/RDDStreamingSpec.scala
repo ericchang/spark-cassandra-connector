@@ -28,7 +28,7 @@ class RDDStreamingSpec
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
   useSparkConf(defaultConf)
 
-  CassandraConnector(SparkTemplate.defaultConf).withSessionDo { session =>
+  CassandraConnector(defaultConf).withSessionDo { session =>
 
     createKeyspace(session)
 
@@ -82,11 +82,11 @@ class RDDStreamingSpec
 
     // start the streaming context so the data can be processed and actor started
     ssc.start()
-    eventually(timeout(1 seconds)) {
+    eventually(timeout(10 seconds)) {
       dataRDDs.isEmpty
     }
 
-    eventually(timeout(5 seconds)) {
+    eventually(timeout(30 seconds)) {
       val rdd = ssc.cassandraTable[WordCount](ks, "streaming_wordcount")
       val result = rdd.collect
       result.nonEmpty should be(true)
@@ -110,11 +110,11 @@ class RDDStreamingSpec
 
     ssc.start()
 
-    eventually(timeout(1 seconds)) {
+    eventually(timeout(10 seconds)) {
       dataRDDs.isEmpty
     }
 
-    eventually(timeout(5 seconds)) {
+    eventually(timeout(30 seconds)) {
       val rdd = ssc.cassandraTable[WordCount](ks, "streaming_join_output")
       val result = rdd.collect
       result.nonEmpty should be(true)
@@ -151,11 +151,11 @@ class RDDStreamingSpec
 
     ssc.start()
 
-    eventually(timeout(1 seconds)) {
+    eventually(timeout(10 seconds)) {
       dataRDDs.isEmpty
     }
 
-    eventually(timeout(5 seconds)) {
+    eventually(timeout(30 seconds)) {
       val rdd = ssc.cassandraTable[WordCount](ks, "dstream_join_output")
       val result = rdd.collect
       result should have size (data.size)
