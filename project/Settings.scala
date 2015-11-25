@@ -55,7 +55,7 @@ object Settings extends Build {
 
   lazy val buildSettings = Seq(
     organization         := "com.datastax.spark",
-    version in ThisBuild := s"1.5.0-M2$versionSuffix",
+    version in ThisBuild := s"yarn-1.5.0-M2$versionSuffix",
     scalaVersion         := Versions.scalaVersion,
     crossScalaVersions   := Versions.crossScala,
     crossVersion         := CrossVersion.binary,
@@ -259,7 +259,13 @@ object Settings extends Build {
         case PathList("com", "google", xs @ _*) => MergeStrategy.last
         case x => old(x)
       }
-    }
+    },
+    assemblyShadeRules in assembly := Seq(
+      // resolves Hadoop 2.6's packaging of guava 11
+      // http://arjon.es/2015/10/12/making-hadoop-2-dot-6-plus-spark-cassandra-driver-play-nice-together/
+      ShadeRule.rename("com.google.**" -> "shadeio.com.google.@1").inAll
+    ),
+    test in assembly := {}
   )
 
   lazy val formatSettings = SbtScalariform.scalariformSettings ++ Seq(
