@@ -17,7 +17,7 @@ trait SparkTemplate {
   def useSparkConf(conf: SparkConf, force: Boolean = false): SparkContext =
     SparkTemplate.useSparkConf(conf, force)
 
-  def defaultSparkConf = SparkTemplate.defaultConf
+  def defaultConf = SparkTemplate.defaultConf
 }
 
 object SparkTemplate {
@@ -82,5 +82,4 @@ object SparkTemplate {
     ret
   }
 
-  resetSparkContext(defaultConf)
 }

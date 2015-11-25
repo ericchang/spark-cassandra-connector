@@ -28,7 +28,7 @@ case class DataCol(pk1: Int, pk2: Int, pk3: Int, d1: Int)
 class RDDSpec extends SparkCassandraITFlatSpecBase {
 
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
   val conn = CassandraConnector(defaultConf)
   val tableName = "key_value"

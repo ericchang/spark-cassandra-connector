@@ -13,7 +13,7 @@ import com.datastax.spark.connector.embedded.SparkTemplate._
 
 class CassandraDataSourceSpec extends SparkCassandraITFlatSpecBase with Logging {
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
   val conn = CassandraConnector(defaultConf)
   conn.withSessionDo { session =>

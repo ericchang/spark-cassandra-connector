@@ -8,7 +8,7 @@ import com.datastax.spark.connector._
 class TableWriterColumnNamesSpec extends SparkCassandraITAbstractSpecBase {
 
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
   val conn = CassandraConnector(defaultConf)
 

@@ -33,7 +33,7 @@ object CustomerIdConverter extends TypeConverter[String] {
 class TableWriterSpec extends SparkCassandraITFlatSpecBase {
 
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
   val conn = CassandraConnector(defaultConf)
 

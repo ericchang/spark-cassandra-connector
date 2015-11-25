@@ -14,7 +14,7 @@ import com.datastax.spark.connector.japi.CassandraJavaUtil._
 class CassandraJavaUtilSpec extends SparkCassandraITFlatSpecBase with BeforeAndAfter {
 
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
   val conn = CassandraConnector(defaultConf)
 

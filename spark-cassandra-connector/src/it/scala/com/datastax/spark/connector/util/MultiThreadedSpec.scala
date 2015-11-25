@@ -1,16 +1,17 @@
 package com.datastax.spark.connector.util
 
-import com.datastax.spark.connector.embedded.SparkTemplate._
-import com.datastax.spark.connector.{SparkCassandraITFlatSpecBase, _}
-import com.datastax.spark.connector.cql.CassandraConnector
-import com.datastax.spark.connector.embedded.EmbeddedCassandra
+import scala.language.postfixOps
+
 import org.scalatest.concurrent.AsyncAssertions
 
+import com.datastax.spark.connector.cql.CassandraConnector
+import com.datastax.spark.connector.{SparkCassandraITFlatSpecBase, _}
 
-class MultiThreadedSpec extends SparkCassandraITFlatSpecBase with AsyncAssertions{
+
+class MultiThreadedSpec extends SparkCassandraITFlatSpecBase with AsyncAssertions {
 
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
   val conn = CassandraConnector(defaultConf)
   val count = 10000
@@ -25,7 +26,7 @@ class MultiThreadedSpec extends SparkCassandraITFlatSpecBase with AsyncAssertion
       session.executeAsync(s"INSERT INTO $ks.$tab (pkey, value) VALUES (?, ?)",
         i: java.lang.Integer,
         "value " + i)
-    ).par.foreach(_.getUninterruptibly)
+      ).par.foreach(_.getUninterruptibly)
   }
 
   "A Spark Context " should " be able to read a Cassandra table in different threads" in {
@@ -36,15 +37,17 @@ class MultiThreadedSpec extends SparkCassandraITFlatSpecBase with AsyncAssertion
       def run() {
         val rdd = sc.cassandraTable[(Int, String)](ks, tab)
         val result = rdd.collect
-        w { result should have size (count) }
-        w.dismiss()
+        w {
+          result should have size count
         }
+        w.dismiss()
+      }
     })
     for (thread <- threads) thread.start()
     import org.scalatest.time.SpanSugar._
 
-    w.await(timeout(10 seconds), dismissals(10))
+    w.await(timeout(30 seconds), dismissals(10))
     for (thread <- threads) thread.join()
-    }
+  }
 
 }

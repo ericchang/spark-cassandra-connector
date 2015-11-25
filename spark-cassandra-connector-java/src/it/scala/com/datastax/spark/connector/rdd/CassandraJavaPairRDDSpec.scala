@@ -9,7 +9,6 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2}
 
 import com.datastax.spark.connector.SparkCassandraITFlatSpecBase
 import com.datastax.spark.connector.cql.CassandraConnector
-import com.datastax.spark.connector.embedded.SparkTemplate._
 import com.datastax.spark.connector.japi.CassandraJavaUtil._
 
 case class SimpleClass(value: Integer)
@@ -17,51 +16,48 @@ case class SimpleClass(value: Integer)
 class CassandraJavaPairRDDSpec extends SparkCassandraITFlatSpecBase {
 
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
   val conn = CassandraConnector(defaultConf)
 
   conn.withSessionDo { session =>
-    createKeyspace(session)
-    doAsync(
-      Future {
-        session.execute(s"CREATE TABLE $ks.test_table_2 (key TEXT, key2 TEXT, value INT, PRIMARY KEY (key, key2))")
-        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('a', 'x', 1)")
-        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('a', 'y', 2)")
-        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('a', 'z', 3)")
-        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('b', 'x', 4)")
-        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('b', 'y', 5)")
-        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('b', 'z', 6)")
-        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('c', 'x', 7)")
-        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('c', 'y', 8)")
-        session.execute(s"INSERT INTO $ks.test_table_2 (key, key2, value) VALUES ('c', 'z', 9)")
-      },
+    try {
+      createKeyspace(session)
 
-      Future {
-        session.execute(s"CREATE TABLE IF NOT EXISTS $ks.wide_rows(key INT, group INT, value VARCHAR, PRIMARY KEY (key, group))")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 10, '1010')")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 11, '1011')")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 12, '1012')")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 20, '2020')")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 21, '2021')")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 22, '2022')")
-      },
+      doAsync(
+        Future {
+          session.execute(s"CREATE TABLE $ks.test_table_1 (key TEXT, key2 TEXT, value INT, PRIMARY KEY (key, key2))")
+          session.execute(s"INSERT INTO $ks.test_table_1 (key, key2, value) VALUES ('a', 'x', 1)")
+          session.execute(s"INSERT INTO $ks.test_table_1 (key, key2, value) VALUES ('a', 'y', 2)")
+          session.execute(s"INSERT INTO $ks.test_table_1 (key, key2, value) VALUES ('a', 'z', 3)")
+          session.execute(s"INSERT INTO $ks.test_table_1 (key, key2, value) VALUES ('b', 'x', 4)")
+          session.execute(s"INSERT INTO $ks.test_table_1 (key, key2, value) VALUES ('b', 'y', 5)")
+          session.execute(s"INSERT INTO $ks.test_table_1 (key, key2, value) VALUES ('b', 'z', 6)")
+          session.execute(s"INSERT INTO $ks.test_table_1 (key, key2, value) VALUES ('c', 'x', 7)")
+          session.execute(s"INSERT INTO $ks.test_table_1 (key, key2, value) VALUES ('c', 'y', 8)")
+          session.execute(s"INSERT INTO $ks.test_table_1 (key, key2, value) VALUES ('c', 'z', 9)")
+        },
 
-      Future {
-        session.execute(s"CREATE TABLE IF NOT EXISTS $ks.wide_rows(key INT, group INT, value VARCHAR, PRIMARY KEY (key, group))")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 10, '1010')")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 11, '1011')")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 12, '1012')")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 20, '2020')")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 21, '2021')")
-        session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 22, '2022')")
-      }
-    )
+        Future {
+          session.execute(s"CREATE TABLE IF NOT EXISTS $ks.wide_rows(key INT, group INT, value VARCHAR, PRIMARY KEY (key, group))")
+          session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 10, '1010')")
+          session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 11, '1011')")
+          session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (10, 12, '1012')")
+          session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 20, '2020')")
+          session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 21, '2021')")
+          session.execute(s"INSERT INTO $ks.wide_rows(key, group, value) VALUES (20, 22, '2022')")
+        }
+      )
+    } catch {
+      case ex: Exception =>
+        ex.printStackTrace(System.err)
+        throw ex
+    }
   }
 
   "CassandraJavaPairRDD" should "allow to reduce by key " in {
     val rows = javaFunctions(sc)
-      .cassandraTable(ks, "test_table_2", mapRowTo(classOf[SimpleClass]))
+      .cassandraTable(ks, "test_table_1", mapRowTo(classOf[SimpleClass]))
       .select("key2", "value")
       .keyBy(mapColumnTo(classOf[String]), classOf[String], "key2")
 
@@ -72,9 +68,9 @@ class CassandraJavaPairRDDSpec extends SparkCassandraITFlatSpecBase {
     val result: util.List[(String, SimpleClass)] = reduced.collect()
 
     result should have size 3
-    result should contain (("x", SimpleClass(12)))
-    result should contain (("y", SimpleClass(15)))
-    result should contain (("z", SimpleClass(18)))
+    result should contain(("x", SimpleClass(12)))
+    result should contain(("y", SimpleClass(15)))
+    result should contain(("z", SimpleClass(18)))
   }
 
   it should "allow to use spanBy method" in {

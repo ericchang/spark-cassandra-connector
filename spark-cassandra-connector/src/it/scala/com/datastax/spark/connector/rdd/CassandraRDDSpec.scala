@@ -50,7 +50,7 @@ case class ClassWithSmallInt(key: Int, value: Short)
 class CassandraRDDSpec extends SparkCassandraITFlatSpecBase {
 
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
   val conn = CassandraConnector(defaultConf)
   val bigTableRowCount = 100000

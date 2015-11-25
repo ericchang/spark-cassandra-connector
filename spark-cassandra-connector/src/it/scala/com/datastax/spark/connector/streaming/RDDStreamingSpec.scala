@@ -1,7 +1,8 @@
 package com.datastax.spark.connector.streaming
 
-import scala.collection.mutable.Queue
+import scala.collection.mutable
 import scala.concurrent.Future
+import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.rdd.RDD
@@ -25,6 +26,7 @@ class RDDStreamingSpec
   import com.datastax.spark.connector.testkit.TestEvent._
 
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
+  useSparkConf(defaultConf)
 
   CassandraConnector(SparkTemplate.defaultConf).withSessionDo { session =>
 
@@ -51,7 +53,7 @@ class RDDStreamingSpec
 
   val r = new Random()
   // Build 4 400 Element RDDs to use as a DStream
-  val dataRDDs = new Queue[RDD[String]]()
+  val dataRDDs = new mutable.Queue[RDD[String]]()
 
   override def beforeEach() {
     while (dataRDDs.nonEmpty) dataRDDs.dequeue
@@ -62,7 +64,7 @@ class RDDStreamingSpec
 
   def withStreamingContext(test: StreamingContext => Any) = {
     val ssc = new StreamingContext(sc, Milliseconds(200))
-    try{
+    try {
       test(ssc)
     }
     finally {
@@ -70,7 +72,7 @@ class RDDStreamingSpec
     }
   }
 
-  "RDDStream" should s"write from the stream to cassandra table: $ks.streaming_wordcount" in withStreamingContext{ ssc =>
+  "RDDStream" should s"write from the stream to cassandra table: $ks.streaming_wordcount" in withStreamingContext { ssc =>
     val stream = ssc.queueStream[String](dataRDDs)
 
     val wc = stream
@@ -80,78 +82,84 @@ class RDDStreamingSpec
 
     // start the streaming context so the data can be processed and actor started
     ssc.start()
-    eventually ( timeout(1 seconds) ){dataRDDs.isEmpty}
+    eventually(timeout(1 seconds)) {
+      dataRDDs.isEmpty
+    }
 
-    eventually ( timeout(5 seconds)) {
+    eventually(timeout(5 seconds)) {
       val rdd = ssc.cassandraTable[WordCount](ks, "streaming_wordcount")
       val result = rdd.collect
       result.nonEmpty should be(true)
-      result.size should be(data.size)
+      result.length should be(data.size)
     }
   }
 
-   it should "be able to utilize joinWithCassandra during transforms " in withStreamingContext { ssc =>
-     val stream = ssc.queueStream[String](dataRDDs)
+  it should "be able to utilize joinWithCassandra during transforms " in withStreamingContext { ssc =>
+    val stream = ssc.queueStream[String](dataRDDs)
 
-     val wc = stream
-       .map(x => (x, 1))
-       .reduceByKey(_ + _)
-       .saveToCassandra(ks, "streaming_wordcount")
+    val wc = stream
+      .map(x => (x, 1))
+      .reduceByKey(_ + _)
+      .saveToCassandra(ks, "streaming_wordcount")
 
-     stream
-       .map(new Tuple1(_))
-       .transform(rdd => rdd.joinWithCassandraTable(ks, "streaming_join"))
-       .map(_._2)
-       .saveToCassandra(ks, "streaming_join_output")
+    stream
+      .map(new Tuple1(_))
+      .transform(rdd => rdd.joinWithCassandraTable(ks, "streaming_join"))
+      .map(_._2)
+      .saveToCassandra(ks, "streaming_join_output")
 
-     ssc.start()
+    ssc.start()
 
-     eventually ( timeout(1 seconds) ){dataRDDs.isEmpty}
-
-     eventually ( timeout(5 seconds)) {
-       val rdd = ssc.cassandraTable[WordCount](ks, "streaming_join_output")
-       val result = rdd.collect
-       result.nonEmpty should be(true)
-       result.size should be(data.size)
-       rdd.collect.nonEmpty && rdd.collect.size == data.size
-       ssc.sparkContext.cassandraTable(ks, "streaming_join_output").collect.size should be(data.size)
-     }
-   }
-
-    it should "be able to utilize joinWithCassandra and repartitionByCassandraTable on a Dstream " in withStreamingContext{ ssc =>
-      val stream = ssc.queueStream[String](dataRDDs)
-
-      val wc = stream
-        .map(x => (x, 1))
-        .reduceByKey(_ + _)
-        .saveToCassandra(ks, "streaming_wordcount")
-
-      val jcRepart = stream
-        .map(new Tuple1(_))
-        .repartitionByCassandraReplica(ks, "streaming_join")
-
-      val conn = CassandraConnector(ssc.sparkContext.getConf)
-
-      jcRepart.foreachRDD(rdd => rdd.partitions.foreach {
-        case e: EndpointPartition =>
-          conn.hosts should contain(e.endpoints.head)
-        case _ =>
-          fail("Unable to get endpoints on repartitioned RDD, This means preferred locations will be broken")
-      })
-
-      jcRepart.joinWithCassandraTable(ks, "streaming_join")
-        .map(_._2)
-        .saveToCassandra(ks, "dstream_join_output")
-
-      ssc.start()
-
-      eventually ( timeout(1 seconds) ){dataRDDs.isEmpty}
-
-      eventually ( timeout(5 seconds)) {
-        val rdd = ssc.cassandraTable[WordCount](ks, "dstream_join_output")
-        val result = rdd.collect
-        result should have size (data.size)
-        ssc.sparkContext.cassandraTable(ks, "dstream_join_output").collect.size should be(data.size)
-      }
+    eventually(timeout(1 seconds)) {
+      dataRDDs.isEmpty
     }
+
+    eventually(timeout(5 seconds)) {
+      val rdd = ssc.cassandraTable[WordCount](ks, "streaming_join_output")
+      val result = rdd.collect
+      result.nonEmpty should be(true)
+      result.length should be(data.size)
+      rdd.collect.nonEmpty && rdd.collect.size == data.size
+      ssc.sparkContext.cassandraTable(ks, "streaming_join_output").collect.size should be(data.size)
+    }
+  }
+
+  it should "be able to utilize joinWithCassandra and repartitionByCassandraTable on a Dstream " in withStreamingContext { ssc =>
+    val stream = ssc.queueStream[String](dataRDDs)
+
+    val wc = stream
+      .map(x => (x, 1))
+      .reduceByKey(_ + _)
+      .saveToCassandra(ks, "streaming_wordcount")
+
+    val jcRepart = stream
+      .map(new Tuple1(_))
+      .repartitionByCassandraReplica(ks, "streaming_join")
+
+    val conn = CassandraConnector(defaultConf)
+
+    jcRepart.foreachRDD(rdd => rdd.partitions.foreach {
+      case e: EndpointPartition =>
+        conn.hosts should contain(e.endpoints.head)
+      case _ =>
+        fail("Unable to get endpoints on repartitioned RDD, This means preferred locations will be broken")
+    })
+
+    jcRepart.joinWithCassandraTable(ks, "streaming_join")
+      .map(_._2)
+      .saveToCassandra(ks, "dstream_join_output")
+
+    ssc.start()
+
+    eventually(timeout(1 seconds)) {
+      dataRDDs.isEmpty
+    }
+
+    eventually(timeout(5 seconds)) {
+      val rdd = ssc.cassandraTable[WordCount](ks, "dstream_join_output")
+      val result = rdd.collect
+      result should have size (data.size)
+      ssc.sparkContext.cassandraTable(ks, "dstream_join_output").collect.size should be(data.size)
+    }
+  }
 }

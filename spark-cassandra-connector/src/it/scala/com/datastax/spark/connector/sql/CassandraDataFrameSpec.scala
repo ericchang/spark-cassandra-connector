@@ -11,9 +11,9 @@ import org.apache.spark.sql.SQLContext
 
 class CassandraDataFrameSpec extends SparkCassandraITFlatSpecBase {
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
-  val conn = CassandraConnector(Set(EmbeddedCassandra.getHost(0)))
+  val conn = CassandraConnector(defaultConf)
 
   val sqlContext: SQLContext = new SQLContext(sc)
 

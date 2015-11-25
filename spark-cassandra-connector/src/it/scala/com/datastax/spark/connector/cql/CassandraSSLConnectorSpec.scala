@@ -8,8 +8,11 @@ class CassandraSSLConnectorSpec extends SparkCassandraITFlatSpecBase {
 
   useCassandraConfig(Seq("cassandra-ssl.yaml.template"))
 
+  // TODO: Add a test so that CassandraConnector is configured for SSL through SparkConf
+
   val conn = CassandraConnector(
     hosts = Set(EmbeddedCassandra.getHost(0)),
+    port = EmbeddedCassandra.getPort(0),
     cassandraSSLConf = CassandraSSLConf(
       enabled = true,
       trustStorePath = Some(ClassLoader.getSystemResource("truststore").getPath),
@@ -23,7 +26,7 @@ class CassandraSSLConnectorSpec extends SparkCassandraITFlatSpecBase {
     conn.withSessionDo { session =>
       assert(session !== null)
       assert(session.isClosed === false)
-      assert(session.getCluster.getMetadata.getClusterName === "Test Cluster0")
+      assert(session.getCluster.getMetadata.getClusterName === "Test Cluster 0")
     }
   }
 

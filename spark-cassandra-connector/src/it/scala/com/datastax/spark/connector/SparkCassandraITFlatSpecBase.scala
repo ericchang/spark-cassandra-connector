@@ -5,6 +5,7 @@ import java.util.concurrent.Executors
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
+import org.apache.commons.lang3.StringUtils
 import org.scalatest._
 
 import com.datastax.driver.core.Session
@@ -20,8 +21,13 @@ trait SparkCassandraITAbstractSpecBase extends AbstractSpec with SparkCassandraI
 
 trait SparkCassandraITSpecBase extends Suite with Matchers with SharedEmbeddedCassandra with SparkTemplate with BeforeAndAfterAll {
 
-  val clName = ""
-  val ks = "scc_test_" + clName
+  def getKsName = {
+    val className = this.getClass.getSimpleName
+    val suffix =  StringUtils.splitByCharacterTypeCamelCase(className.filter(_.isLetterOrDigit)).mkString("_")
+    s"test_$suffix".toLowerCase()
+  }
+
+  val ks = getKsName
 
   implicit val ec = SparkCassandraITSpecBase.ec
 

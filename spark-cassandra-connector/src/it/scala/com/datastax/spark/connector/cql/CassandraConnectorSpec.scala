@@ -56,7 +56,7 @@ class CassandraConnectorSpec extends SparkCassandraITFlatSpecBase {
 
   it should "disconnect from the cluster after use" in {
     val cluster = conn.withClusterDo { cluster => cluster }
-    Thread.sleep(CassandraConnector.keepAliveMillis * 2)
+    Thread.sleep(defaultConf.getInt("spark.cassandra.connection.keep_alive_ms", CassandraConnector.keepAliveMillis) * 2)
     assert(cluster.isClosed === true)
   }
 
@@ -136,9 +136,7 @@ class CassandraConnectorSpec extends SparkCassandraITFlatSpecBase {
   }
 
   it should "use compression when configured" in {
-    val host = EmbeddedCassandra.getHost(0).getHostAddress
-    val conf = new SparkConf(loadDefaults = false)
-      .set(CassandraConnectorConf.ConnectionHostParam.name, host)
+    val conf = defaultConf
       .set(CassandraConnectorConf.CompressionParam.name, "SNAPPY")
 
     val conn = CassandraConnector(conf)

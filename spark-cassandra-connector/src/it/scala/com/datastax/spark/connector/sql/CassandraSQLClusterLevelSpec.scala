@@ -5,16 +5,15 @@ import scala.concurrent.Future
 import com.datastax.spark.connector.SparkCassandraITFlatSpecBase
 import com.datastax.spark.connector.cql.CassandraConnector
 import com.datastax.spark.connector.embedded.EmbeddedCassandra._
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.cassandra.CassandraSQLContext
 
 class CassandraSQLClusterLevelSpec extends SparkCassandraITFlatSpecBase {
   useCassandraConfig(Seq("cassandra-default.yaml.template", "cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
-  val conn = CassandraConnector(defaultSparkConf)
+  val conn = CassandraConnector(defaultConf)
 
-  val conf2 = new SparkConf(true)
+  val conf2 = defaultConf
     .set("spark.cassandra.connection.host", getHost(1).getHostAddress)
     .set("spark.cassandra.connection.port", getPort(1).toString)
   val conn2 = CassandraConnector(conf2)

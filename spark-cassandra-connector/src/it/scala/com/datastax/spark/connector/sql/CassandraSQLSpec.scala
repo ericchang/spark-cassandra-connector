@@ -3,6 +3,7 @@ package com.datastax.spark.connector.sql
 import scala.concurrent.Future
 
 import org.apache.spark.sql.cassandra.CassandraSQLContext
+import org.scalatest.ParallelTestExecution
 
 import com.datastax.spark.connector.SparkCassandraITFlatSpecBase
 import com.datastax.spark.connector.cql.CassandraConnector
@@ -10,7 +11,7 @@ import com.datastax.spark.connector.embedded.SparkTemplate._
 
 class CassandraSQLSpec extends SparkCassandraITFlatSpecBase {
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  useSparkConf(defaultSparkConf)
+  useSparkConf(defaultConf)
 
   val conn = CassandraConnector(defaultConf)
   var cc: CassandraSQLContext = null
@@ -297,11 +298,8 @@ class CassandraSQLSpec extends SparkCassandraITFlatSpecBase {
     )
   }
 
-  override def beforeAll() {
-    super.beforeAll()
-    cc = new CassandraSQLContext(sc)
-    cc.setKeyspace(ks1)
-  }
+  cc = new CassandraSQLContext(sc)
+  cc.setKeyspace(ks1)
 
   it should "allow to select all rows" in {
     val result = cc.sql(s"SELECT * FROM test1").collect()

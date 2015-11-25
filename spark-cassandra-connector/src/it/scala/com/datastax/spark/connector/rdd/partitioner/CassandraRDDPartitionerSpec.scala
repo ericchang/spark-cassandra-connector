@@ -13,7 +13,7 @@ class CassandraRDDPartitionerSpec
   extends SparkCassandraITFlatSpecBase {
 
   useCassandraConfig(Seq("cassandra-default.yaml.template"))
-  val conn = CassandraConnector(hosts = Set(EmbeddedCassandra.getHost(0)))
+  val conn = CassandraConnector(defaultConf)
 
   conn.withSessionDo { session =>
     createKeyspace(session)
@@ -54,7 +54,8 @@ class CassandraRDDPartitionerSpec
     }
 
     for (host <- conn.hosts) {
-      val nodeProbe = new NodeProbe(host.getHostAddress, CassandraRunner.DefaultJmxPort)
+      val nodeProbe = new NodeProbe(host.getHostAddress,
+        EmbeddedCassandra.cassandraRunners(0).map(_.jmxPort).getOrElse(CassandraRunner.DefaultJmxPort))
       nodeProbe.forceKeyspaceFlush(ks, tableName)
     }
 
