@@ -76,7 +76,7 @@ object EmbeddedCassandra {
     require(hosts.isEmpty || index < hosts.length, s"$index index is overflow the size of ${hosts.length}")
     val host = getHost(index).getHostAddress
     Map(
-      "seeds" -> host,
+      "seeds" -> "",
       "storage_port" -> cassandraPorts.getStoragePort(index).toString,
       "ssl_storage_port" -> cassandraPorts.getSslStoragePort(index).toString,
       "native_transport_port" -> getPort(index).toString,

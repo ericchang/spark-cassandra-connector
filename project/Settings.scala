@@ -43,7 +43,11 @@ object Settings extends Build {
 
   val mavenLocalResolver = BuildUtil.mavenLocalResolver
 
-  lazy val mainDir = new File(".")
+  lazy val mainDir = {
+    val dir = new File(".")
+    IO.delete(new File(dir, "target/ports"))
+    dir
+  }
 
   lazy val TEST_JAVA_OPTS = Seq(
     "-XX:MaxPermSize=256M",

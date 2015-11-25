@@ -8,11 +8,9 @@ import org.apache.spark.repl.SparkILoop
 
 trait SparkRepl {
 
-  def runInterpreter(master: String, input: String): String = {
+  def runInterpreter(input: String): String = {
     SparkTemplate.defaultConf.getAll.filter(_._1.startsWith("spark.cassandra."))
       .foreach(p => System.setProperty(p._1, p._2))
-    System.setProperty("spark.cassandra.connection.host", EmbeddedCassandra.getHost(0).getHostAddress)
-    System.setProperty("spark.cassandra.connection.port", EmbeddedCassandra.getPort(0).toString)
     val in = new BufferedReader(new StringReader(input + "\n"))
     val out = new StringWriter()
     val cl = getClass.getClassLoader
@@ -27,7 +25,7 @@ trait SparkRepl {
       case _ =>
     }
 
-    val interp = new SparkILoop(in, new PrintWriter(out), master)
+    val interp = new SparkILoop(in, new PrintWriter(out))
     org.apache.spark.repl.Main.interp = interp
     val separator = System.getProperty("path.separator")
     interp.process(Array("-classpath", paths.mkString(separator)))

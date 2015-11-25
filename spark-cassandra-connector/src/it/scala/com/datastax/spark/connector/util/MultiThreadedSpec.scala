@@ -14,7 +14,7 @@ class MultiThreadedSpec extends SparkCassandraITFlatSpecBase with AsyncAssertion
   useSparkConf(defaultConf)
 
   val conn = CassandraConnector(defaultConf)
-  val count = 10000
+  val count = 1000
 
   val tab = "mt_test"
 
@@ -33,7 +33,7 @@ class MultiThreadedSpec extends SparkCassandraITFlatSpecBase with AsyncAssertion
 
     val w = new Waiter
 
-    val threads = for (theadnum <- 1 to 10) yield new Thread(new Runnable {
+    val threads = for (theadnum <- 1 to 5) yield new Thread(new Runnable {
       def run() {
         val rdd = sc.cassandraTable[(Int, String)](ks, tab)
         val result = rdd.collect
@@ -46,7 +46,7 @@ class MultiThreadedSpec extends SparkCassandraITFlatSpecBase with AsyncAssertion
     for (thread <- threads) thread.start()
     import org.scalatest.time.SpanSugar._
 
-    w.await(timeout(30 seconds), dismissals(10))
+    w.await(timeout(30 seconds), dismissals(5))
     for (thread <- threads) thread.join()
   }
 

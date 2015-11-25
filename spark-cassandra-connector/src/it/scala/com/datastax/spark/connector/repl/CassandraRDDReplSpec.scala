@@ -21,7 +21,7 @@ class CassandraRDDReplSpec extends SparkCassandraITFlatSpecBase with SparkRepl {
   }
 
   it should "allow to read a Cassandra table as Array of Scala class objects in REPL" in {
-    val output = runInterpreter("local",
+    val output = runInterpreter(
       s"""
         |import com.datastax.spark.connector._
         |

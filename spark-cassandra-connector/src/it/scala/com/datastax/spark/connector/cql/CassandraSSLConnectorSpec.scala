@@ -17,10 +17,8 @@ class CassandraSSLConnectorSpec extends SparkCassandraITFlatSpecBase {
       enabled = true,
       trustStorePath = Some(ClassLoader.getSystemResource("truststore").getPath),
       trustStorePassword = Some("connector"),
-      enabledAlgorithms = Set("TLS_RSA_WITH_AES_128_CBC_SHA")))
-
-  // Wait for the default user to be created in Cassandra.
-  Thread.sleep(1000)
+      enabledAlgorithms = Set("TLS_RSA_WITH_AES_128_CBC_SHA")),
+    connectTimeoutMillis = 30000)
 
   "A CassandraConnector" should "be able to use a secure connection when using native protocol" in {
     conn.withSessionDo { session =>

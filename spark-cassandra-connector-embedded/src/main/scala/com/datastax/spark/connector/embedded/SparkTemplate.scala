@@ -31,7 +31,7 @@ object SparkTemplate {
     .set("spark.cassandra.query.retry.delay", "1")
     .set("spark.ui.enabled", "false")
     .set("spark.cleaner.ttl", "3600")
-    .setMaster(sys.env.getOrElse("IT_TEST_SPARK_MASTER", "local[*]"))
+    .setMaster(sys.env.getOrElse("IT_TEST_SPARK_MASTER", "local[2]"))
     .setAppName("Test")
 
   def defaultConf = _defaultConf.clone()
